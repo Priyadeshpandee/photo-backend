@@ -1,0 +1,6 @@
+@PhotographyCMS_HostAddress = http://localhost:5249
+
+GET {{PhotographyCMS_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
