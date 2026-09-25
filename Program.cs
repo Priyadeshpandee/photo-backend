@@ -76,6 +76,14 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+// Apply any pending EF Core migrations automatically on startup.
+// This is what actually updates the Render Postgres database with the
+// new MediaType column — no manual "dotnet ef database update" needed.
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    context.Database.Migrate();
+}
 
 // Enable Swagger in all environments
 app.UseSwagger();

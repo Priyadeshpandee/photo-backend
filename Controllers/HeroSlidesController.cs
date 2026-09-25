@@ -13,6 +13,9 @@ namespace PhotographyCMS.Controllers
         private readonly AppDbContext _context;
         private readonly IWebHostEnvironment _env;
 
+        private static readonly string[] AllowedImageExtensions = { ".jpg", ".jpeg", ".png", ".webp" };
+        private static readonly string[] AllowedVideoExtensions = { ".mp4", ".webm", ".mov", ".m4v" };
+
         public HeroSlidesController(AppDbContext context, IWebHostEnvironment env)
         {
             _context = context;
@@ -31,6 +34,7 @@ namespace PhotographyCMS.Controllers
 
         [HttpPost("upload")]
         [Consumes("multipart/form-data")]
+        [RequestSizeLimit(200_000_000)] // videos are much bigger than photos — raise as needed
         public async Task<IActionResult> Upload([FromForm] MultipleImagesUploadDto dto)
         {
             var images = dto.Images ?? new List<IFormFile>();
@@ -50,8 +54,9 @@ namespace PhotographyCMS.Controllers
             {
                 var file = images[i];
                 var ext = Path.GetExtension(file.FileName).ToLower();
-                var allowed = new string[] { ".jpg", ".jpeg", ".png", ".webp" };
-                if (!allowed.Contains(ext)) continue;
+                var isImage = AllowedImageExtensions.Contains(ext);
+                var isVideo = AllowedVideoExtensions.Contains(ext);
+                if (!isImage && !isVideo) continue;
 
                 var fileName = $"{Guid.NewGuid()}{ext}";
                 var filePath = Path.Combine(uploadsFolder, fileName);
@@ -63,6 +68,7 @@ namespace PhotographyCMS.Controllers
                 {
                     Title = titles.ElementAtOrDefault(i) ?? Path.GetFileNameWithoutExtension(file.FileName),
                     ImageUrl = $"/uploads/slides/{fileName}",
+                    MediaType = isVideo ? "video" : "image",
                     DisplayOrder = ++maxOrder,
                     IsActive = true
                 };
@@ -77,6 +83,7 @@ namespace PhotographyCMS.Controllers
 
         [HttpPost("upload-image")]
         [Consumes("multipart/form-data")]
+        [RequestSizeLimit(200_000_000)]
         public async Task<IActionResult> UploadImageOnly([FromForm] ImageUploadDto dto)
         {
             var image = dto.Image;
@@ -84,9 +91,10 @@ namespace PhotographyCMS.Controllers
                 return BadRequest("No image provided.");
 
             var ext = Path.GetExtension(image.FileName).ToLower();
-            var allowed = new string[] { ".jpg", ".jpeg", ".png", ".webp" };
-            if (!allowed.Contains(ext))
-                return BadRequest("Invalid image type.");
+            var isImage = AllowedImageExtensions.Contains(ext);
+            var isVideo = AllowedVideoExtensions.Contains(ext);
+            if (!isImage && !isVideo)
+                return BadRequest("Invalid file type.");
 
             var uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "slides");
             Directory.CreateDirectory(uploadsFolder);
@@ -97,7 +105,11 @@ namespace PhotographyCMS.Controllers
             using var stream = new FileStream(filePath, FileMode.Create);
             await image.CopyToAsync(stream);
 
-            return Ok(new { imageUrl = $"/uploads/slides/{fileName}" });
+            return Ok(new
+            {
+                imageUrl = $"/uploads/slides/{fileName}",
+                mediaType = isVideo ? "video" : "image"
+            });
         }
 
         [HttpPut("{id}")]
@@ -110,6 +122,7 @@ namespace PhotographyCMS.Controllers
             slide.IsActive = dto.IsActive ?? slide.IsActive;
             slide.DisplayOrder = dto.DisplayOrder ?? slide.DisplayOrder;
             slide.ImageUrl = dto.ImageUrl ?? slide.ImageUrl;
+            slide.MediaType = dto.MediaType ?? slide.MediaType;
 
             await _context.SaveChangesAsync();
             return Ok(slide);
